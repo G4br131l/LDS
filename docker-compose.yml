@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: umbrella_db
+    environment:
+      POSTGRES_USER: umbrella
+      POSTGRES_PASSWORD: umbrella123
+      POSTGRES_DB: umbrella
+    ports:
+      - "5432:5432"
+    volumes:
+      - umbrella_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  umbrella_pgdata:
