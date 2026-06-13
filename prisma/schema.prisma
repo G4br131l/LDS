@@ -1,0 +1,570 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────── ENUMS ─────────
+
+enum TipoPerfil {
+  Proprietario
+  Gerente
+  Medico
+  Secretaria
+  Financeiro
+  Paciente
+}
+
+enum Modulo {
+  Dashboard
+  Agenda
+  Pacientes
+  Prontuario
+  Profissionais
+  Clinicas
+  Consultorios
+  Financeiro
+  Relatorios
+  Usuarios
+}
+
+enum StatusUsuario {
+  Ativo
+  Bloqueado
+  Inativo
+}
+
+enum StatusClinica {
+  Ativa
+  Em_implantacao
+  Inativa
+}
+
+enum DiaSemana {
+  Segunda
+  Terca
+  Quarta
+  Quinta
+  Sexta
+  Sabado
+  Domingo
+}
+
+enum TipoCapacidade {
+  Individual
+  Dupla
+}
+
+enum StatusConsultorio {
+  Ativo
+  Manutencao
+  Inativo
+}
+
+enum TipoConselho {
+  CRM
+  CRO
+  COREN
+  CRP
+  CREFITO
+  CRN
+  CRF
+  CRFa
+  CREF
+  CRBM
+  Outro
+}
+
+enum ModeloCobranca {
+  Percentual
+  Aluguel
+}
+
+enum StatusProfissional {
+  Ativo
+  Inativo
+}
+
+enum TipoRecorrencia {
+  Nenhuma
+  Semanal
+  Mensal
+}
+
+enum Sexo {
+  Masculino
+  Feminino
+  Outro
+}
+
+enum StatusPaciente {
+  Ativo
+  Inativo
+}
+
+enum TipoConsulta {
+  Primeira_consulta
+  Retorno
+  Procedimento
+  Urgencia
+}
+
+enum StatusConsulta {
+  Agendada
+  Confirmada
+  Realizada
+  Cancelada
+  Nao_compareceu
+}
+
+enum FormaPagamento {
+  Convenio
+  Particular
+  Pix
+  Cartao_credito
+  Cartao_debito
+  Dinheiro
+  Transferencia
+}
+
+enum TipoCampoClinico {
+  PressaoArterial
+  Peso
+  Altura
+  Temperatura
+  Glicemia
+  Saturacao
+  FrequenciaCardiaca
+  Procedimento
+  Medicamento
+  Exame
+  Custom
+}
+
+enum StatusPagamento {
+  Pendente
+  Recebido
+  Parcial
+}
+
+// ───────── ACESSO ─────────
+
+model PerfilAcesso {
+  id        BigInt     @id @default(autoincrement())
+  tipo      TipoPerfil @unique
+  descricao String?    @db.VarChar(255)
+
+  permissoes Permissao[]
+  usuarios   Usuario[]
+
+  @@map("perfil_acesso")
+}
+
+model Permissao {
+  id             BigInt  @id @default(autoincrement())
+  perfilAcessoId BigInt
+  modulo         Modulo
+  ver            Boolean @default(false)
+  criar          Boolean @default(false)
+  editar         Boolean @default(false)
+  excluir        Boolean @default(false)
+
+  perfilAcesso PerfilAcesso @relation(fields: [perfilAcessoId], references: [id])
+
+  @@unique([perfilAcessoId, modulo])
+  @@map("permissao")
+}
+
+model Usuario {
+  id              BigInt        @id @default(autoincrement())
+  perfilAcessoId  BigInt
+  pacienteId      BigInt?       @unique
+  profissionalId  BigInt?       @unique
+  nome            String        @db.VarChar(150)
+  email           String        @unique @db.VarChar(150)
+  cpf             String        @unique @db.Char(14)
+  telefone        String?       @db.VarChar(20)
+  senhaHash       String        @db.VarChar(255)
+  status          StatusUsuario @default(Ativo)
+  exigir2fa       Boolean       @default(false)
+  restringirPorIp Boolean       @default(false)
+  ultimoAcesso    DateTime?
+  criadoEm        DateTime      @default(now())
+  resetToken      String?       @db.Char(64)
+  resetExpiraEm   DateTime?
+
+  perfilAcesso PerfilAcesso     @relation(fields: [perfilAcessoId], references: [id])
+  paciente     Paciente?        @relation(fields: [pacienteId], references: [id])
+  profissional Profissional?    @relation(fields: [profissionalId], references: [id])
+  logs         LogAuditoria[]
+  clinicas     UsuarioClinica[]
+
+  @@index([email])
+  @@index([cpf])
+  @@index([status])
+  @@map("usuario")
+}
+
+model LogAuditoria {
+  id        BigInt   @id @default(autoincrement())
+  usuarioId BigInt
+  acao      String   @db.VarChar(50)
+  detalhes  String?
+  ip        String?  @db.VarChar(45)
+  dataHora  DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId])
+  @@index([dataHora])
+  @@map("log_auditoria")
+}
+
+// ───────── REDE DE CLÍNICAS ─────────
+
+model Clinica {
+  id                   BigInt        @id @default(autoincrement())
+  responsavelTecnicoId BigInt?
+  nome                 String        @db.VarChar(150)
+  cnpj                 String        @unique @db.Char(18)
+  telefone             String?       @db.VarChar(20)
+  endereco             String?       @db.VarChar(255)
+  cidade               String?       @db.VarChar(100)
+  estado               String?       @db.Char(2)
+  cep                  String?       @db.Char(9)
+  status               StatusClinica @default(Ativa)
+
+  responsavelTecnico    Profissional?          @relation("ResponsavelTecnico", fields: [responsavelTecnicoId], references: [id])
+  horariosFuncionamento HorarioFuncionamento[]
+  consultorios          Consultorio[]
+  usuarios              UsuarioClinica[]
+  pacientes             Paciente[]
+  pagamentos            Pagamento[]
+
+  @@index([cnpj])
+  @@index([status])
+  @@map("clinica")
+}
+
+model UsuarioClinica {
+  usuarioId BigInt
+  clinicaId BigInt
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  clinica Clinica @relation(fields: [clinicaId], references: [id])
+
+  @@id([usuarioId, clinicaId])
+  @@map("usuario_clinica")
+}
+
+model HorarioFuncionamento {
+  id        BigInt    @id @default(autoincrement())
+  clinicaId BigInt
+  diaSemana DiaSemana
+  abertura  DateTime  @db.Time()
+  fechamento DateTime @db.Time()
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id])
+
+  @@unique([clinicaId, diaSemana])
+  @@map("horario_funcionamento")
+}
+
+model Consultorio {
+  id                     BigInt            @id @default(autoincrement())
+  clinicaId              BigInt
+  identificacao          String            @db.VarChar(50)
+  andar                  String?           @db.VarChar(50)
+  especialidadePrincipal String?           @db.VarChar(100)
+  capacidade             TipoCapacidade    @default(Individual)
+  horaAbertura           DateTime?         @db.Time()
+  horaFechamento         DateTime?         @db.Time()
+  valorPorHora           Decimal?          @db.Decimal(10, 2)
+  status                 StatusConsultorio @default(Ativo)
+  observacoes            String?
+
+  clinica      Clinica               @relation(fields: [clinicaId], references: [id])
+  vinculos     VinculoProfissional[]
+  agendamentos AgendamentoSala[]
+  consultas    Consulta[]
+
+  @@unique([clinicaId, identificacao])
+  @@index([clinicaId])
+  @@map("consultorio")
+}
+
+// ───────── PROFISSIONAIS ─────────
+
+model Especialidade {
+  id   BigInt @id @default(autoincrement())
+  nome String @unique @db.VarChar(100)
+
+  profissionais      ProfissionalEspecialidade[]
+  entradasProntuario EntradaProntuario[]
+  consultas          Consulta[]
+
+  @@map("especialidade")
+}
+
+model Profissional {
+  id               BigInt             @id @default(autoincrement())
+  nome             String             @db.VarChar(150)
+  conselho         TipoConselho
+  registroConselho String             @db.VarChar(20)
+  ufConselho       String             @db.Char(2)
+  telefone         String?            @db.VarChar(20)
+  email            String             @unique @db.VarChar(150)
+  modeloCobranca   ModeloCobranca
+  valorCobranca    Decimal            @db.Decimal(10, 2)
+  status           StatusProfissional @default(Ativo)
+
+  usuario             Usuario?
+  especialidades      ProfissionalEspecialidade[]
+  vinculos            VinculoProfissional[]
+  agendamentos        AgendamentoSala[]
+  consultas           Consulta[]
+  entradasProntuario  EntradaProntuario[]
+  pagamentos          Pagamento[]
+  clinicasResponsavel Clinica[]  @relation("ResponsavelTecnico")
+  pacientesReferencia Paciente[] @relation("MedicoReferencia")
+
+  @@unique([conselho, registroConselho, ufConselho])
+  @@index([email])
+  @@index([status])
+  @@map("profissional")
+}
+
+model ProfissionalEspecialidade {
+  profissionalId  BigInt
+  especialidadeId BigInt
+
+  profissional  Profissional  @relation(fields: [profissionalId], references: [id])
+  especialidade Especialidade @relation(fields: [especialidadeId], references: [id])
+
+  @@id([profissionalId, especialidadeId])
+  @@map("profissional_especialidade")
+}
+
+model VinculoProfissional {
+  id             BigInt @id @default(autoincrement())
+  profissionalId BigInt
+  consultorioId  BigInt
+  diasSemana     String @db.VarChar(50)
+
+  profissional Profissional     @relation(fields: [profissionalId], references: [id])
+  consultorio  Consultorio      @relation(fields: [consultorioId], references: [id])
+  horarios     VinculoHorario[]
+
+  @@index([profissionalId])
+  @@index([consultorioId])
+  @@map("vinculo_profissional")
+}
+
+model VinculoHorario {
+  id        BigInt   @id @default(autoincrement())
+  vinculoId BigInt
+  horario   DateTime @db.Time()
+
+  vinculo VinculoProfissional @relation(fields: [vinculoId], references: [id])
+
+  @@unique([vinculoId, horario])
+  @@map("vinculo_horario")
+}
+
+// ───────── AGENDAMENTO DE SALA ─────────
+
+model AgendamentoSala {
+  id             BigInt          @id @default(autoincrement())
+  profissionalId BigInt
+  consultorioId  BigInt
+  data           DateTime        @db.Date
+  recorrencia    TipoRecorrencia @default(Nenhuma)
+
+  profissional Profissional        @relation(fields: [profissionalId], references: [id])
+  consultorio  Consultorio         @relation(fields: [consultorioId], references: [id])
+  horarios     AgendamentoHorario[]
+
+  @@index([profissionalId])
+  @@index([consultorioId])
+  @@index([consultorioId, data])
+  @@map("agendamento_sala")
+}
+
+model AgendamentoHorario {
+  id                BigInt   @id @default(autoincrement())
+  agendamentoSalaId BigInt
+  horario           DateTime @db.Time()
+
+  agendamentoSala AgendamentoSala @relation(fields: [agendamentoSalaId], references: [id])
+
+  @@unique([agendamentoSalaId, horario])
+  @@map("agendamento_horario")
+}
+
+// ───────── PACIENTES ─────────
+
+model Paciente {
+  id                  BigInt         @id @default(autoincrement())
+  clinicaReferenciaId BigInt?
+  medicoReferenciaId  BigInt?
+  codigo              String         @unique @db.VarChar(10)
+  nome                String         @db.VarChar(150)
+  cpf                 String         @unique @db.Char(14)
+  rg                  String?        @db.VarChar(20)
+  dataNascimento      DateTime       @db.Date
+  sexo                Sexo
+  telefone            String         @db.VarChar(20)
+  telefoneAlternativo String?        @db.VarChar(20)
+  email               String?        @db.VarChar(150)
+  endereco            String?        @db.VarChar(255)
+  cidade              String?        @db.VarChar(100)
+  estado              String?        @db.Char(2)
+  cep                 String?        @db.Char(9)
+  alergias            String?
+  observacoes         String?
+  status              StatusPaciente @default(Ativo)
+
+  clinicaReferencia Clinica?      @relation(fields: [clinicaReferenciaId], references: [id])
+  medicoReferencia  Profissional? @relation("MedicoReferencia", fields: [medicoReferenciaId], references: [id])
+  usuario           Usuario?
+  consultas         Consulta[]
+  prontuario        Prontuario?
+
+  @@index([cpf])
+  @@index([codigo])
+  @@index([nome])
+  @@index([status])
+  @@map("paciente")
+}
+
+// ───────── CONSULTAS ─────────
+
+model Consulta {
+  id              BigInt          @id @default(autoincrement())
+  pacienteId      BigInt
+  profissionalId  BigInt
+  consultorioId   BigInt
+  especialidadeId BigInt?
+  numero          String          @unique @db.VarChar(20)
+  tipo            TipoConsulta
+  data            DateTime        @db.Date
+  hora            DateTime        @db.Time()
+  duracaoMinutos  Int             @default(30)
+  status          StatusConsulta  @default(Agendada)
+  motivo          String?
+  valor           Decimal?        @db.Decimal(10, 2)
+  pago            Boolean         @default(false)
+  formaPagamento  FormaPagamento?
+
+  paciente      Paciente      @relation(fields: [pacienteId], references: [id])
+  profissional  Profissional  @relation(fields: [profissionalId], references: [id])
+  consultorio   Consultorio   @relation(fields: [consultorioId], references: [id])
+  especialidade Especialidade? @relation(fields: [especialidadeId], references: [id])
+
+  anexos             Anexo[]
+  entradasProntuario EntradaProntuario[]
+
+  @@index([numero])
+  @@index([pacienteId])
+  @@index([profissionalId])
+  @@index([consultorioId])
+  @@index([data, hora])
+  @@index([status])
+  @@map("consulta")
+}
+
+model Anexo {
+  id                  BigInt  @id @default(autoincrement())
+  consultaId          BigInt?
+  entradaProntuarioId BigInt?
+  nome                String  @db.VarChar(255)
+  tipoMime            String  @db.VarChar(100)
+  tamanhoBytes        BigInt?
+  caminhoArquivo      String  @db.VarChar(500)
+
+  consulta          Consulta?          @relation(fields: [consultaId], references: [id])
+  entradaProntuario EntradaProntuario? @relation(fields: [entradaProntuarioId], references: [id])
+
+  @@index([consultaId])
+  @@index([entradaProntuarioId])
+  @@map("anexo")
+}
+
+// ───────── PRONTUÁRIO ─────────
+
+model Prontuario {
+  id         BigInt @id @default(autoincrement())
+  pacienteId BigInt @unique
+
+  paciente Paciente            @relation(fields: [pacienteId], references: [id])
+  entradas EntradaProntuario[]
+
+  @@map("prontuario")
+}
+
+model EntradaProntuario {
+  id                 BigInt   @id @default(autoincrement())
+  prontuarioId       BigInt
+  profissionalId     BigInt
+  especialidadeId    BigInt
+  consultaId         BigInt?
+  data               DateTime @db.Date
+  texto              String
+  valorConsulta      Decimal  @default(0) @db.Decimal(10, 2)
+  totalProcedimentos Decimal  @default(0) @db.Decimal(10, 2)
+  rascunho           Boolean  @default(false)
+
+  prontuario    Prontuario    @relation(fields: [prontuarioId], references: [id])
+  profissional  Profissional  @relation(fields: [profissionalId], references: [id])
+  especialidade Especialidade @relation(fields: [especialidadeId], references: [id])
+  consulta      Consulta?     @relation(fields: [consultaId], references: [id])
+  campos        CampoClinico[]
+  anexos        Anexo[]
+
+  @@index([prontuarioId])
+  @@index([profissionalId])
+  @@index([consultaId])
+  @@index([data])
+  @@map("entrada_prontuario")
+}
+
+model CampoClinico {
+  id                  BigInt           @id @default(autoincrement())
+  entradaProntuarioId BigInt
+  tipo                TipoCampoClinico
+  nomeCustom          String?          @db.VarChar(100)
+  valor               String?          @db.VarChar(255)
+  unidade             String?          @db.VarChar(30)
+  preco               Decimal?         @db.Decimal(10, 2)
+
+  entradaProntuario EntradaProntuario @relation(fields: [entradaProntuarioId], references: [id])
+
+  @@index([entradaProntuarioId])
+  @@map("campo_clinico")
+}
+
+// ───────── FINANCEIRO ─────────
+
+model Pagamento {
+  id              BigInt          @id @default(autoincrement())
+  profissionalId  BigInt
+  clinicaId       BigInt
+  dataInicio      DateTime        @db.Date
+  dataFim         DateTime        @db.Date
+  valorDevido     Decimal         @db.Decimal(10, 2)
+  valorRecebido   Decimal         @default(0) @db.Decimal(10, 2)
+  formaPagamento  FormaPagamento?
+  dataRecebimento DateTime?       @db.Date
+  status          StatusPagamento @default(Pendente)
+
+  profissional Profissional @relation(fields: [profissionalId], references: [id])
+  clinica      Clinica      @relation(fields: [clinicaId], references: [id])
+
+  @@unique([profissionalId, dataInicio, dataFim])
+  @@index([clinicaId])
+  @@index([status])
+  @@map("pagamento")
+}
